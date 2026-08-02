@@ -13,7 +13,7 @@ export class SocketIOProvider {
 
     this.socket = io(getSocketUrl(), {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],
     });
 
     this.socket.on('connect', () => {

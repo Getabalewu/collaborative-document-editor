@@ -15,14 +15,32 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
   const [sharePerm, setSharePerm] = useState('viewer');
   const [shareError, setShareError] = useState('');
 
+  const [userList, setUserList] = useState([]);
+  const [selectedUserEmail, setSelectedUserEmail] = useState('');
+
   const canComment = ['owner', 'commenter', 'editor'].includes(permission);
   const isOwner = permission === 'owner';
 
   useEffect(() => {
     loadComments();
     loadVersions();
-    if (isOwner) loadCollaborators();
+    if (isOwner) {
+      loadCollaborators();
+      loadUserList();
+    }
   }, [documentId]);
+
+  async function loadUserList() {
+    try {
+      const { users } = await api.searchUsers('');
+      setUserList(users || []);
+      if (users?.length > 0) {
+        setSelectedUserEmail(users[0].email);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function loadComments() {
     try {
@@ -86,12 +104,26 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
   async function handleShare(e) {
     e.preventDefault();
     setShareError('');
+    const targetEmail = selectedUserEmail || shareEmail;
+    if (!targetEmail) {
+      setShareError('Please select or enter a user email');
+      return;
+    }
     try {
-      const { collaborators: c } = await api.shareDocument(documentId, shareEmail, sharePerm);
+      const { collaborators: c } = await api.shareDocument(documentId, targetEmail, sharePerm);
       setCollaborators((prev) => ({ ...prev, collaborators: c }));
       setShareEmail('');
     } catch (err) {
       setShareError(err.message);
+    }
+  }
+
+  async function handleUpdatePermission(email, newPerm) {
+    try {
+      const { collaborators: c } = await api.shareDocument(documentId, email, newPerm);
+      setCollaborators((prev) => ({ ...prev, collaborators: c }));
+    } catch (err) {
+      alert(err.message);
     }
   }
 
@@ -176,8 +208,16 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
               <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No versions saved yet.</p>
             ) : (
               versions.map((v) => (
-                <div key={v._id} className="version-item" onClick={() => handleRestore(v._id)}>
-                  <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{v.label}</div>
+                <div
+                  key={v._id}
+                  className="version-item"
+                  onClick={() => isOwner && handleRestore(v._id)}
+                  style={{ cursor: isOwner ? 'pointer' : 'default' }}
+                >
+                  <div style={{ fontWeight: 500, fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{v.label}</span>
+                    {isOwner && <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Restore</span>}
+                  </div>
                   <div className="comment-meta">
                     {v.savedBy?.name} · {formatDate(v.createdAt)}
                   </div>
@@ -189,22 +229,47 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
 
         {tab === 'share' && isOwner && (
           <>
-            <form className="share-form" onSubmit={handleShare}>
-              <input
-                type="email"
-                placeholder="Collaborator email"
-                value={shareEmail}
-                onChange={(e) => setShareEmail(e.target.value)}
-                required
+            <form className="share-form" onSubmit={handleShare} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Select User to Share With:</label>
+              {userList.length > 0 ? (
+                <select
+                  value={selectedUserEmail}
+                  onChange={(e) => setSelectedUserEmail(e.target.value)}
+                  style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}
+                >
+                  {userList.map((u) => (
+                    <option key={u._id} value={u.email}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="email"
+                  placeholder="Collaborator email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  required
+                  style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}
+                />
+              )}
+
+              <label style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: 4 }}>Assign Permission Role:</label>
+              <select
+                value={sharePerm}
+                onChange={(e) => setSharePerm(e.target.value)}
                 style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}
-              />
-              <select value={sharePerm} onChange={(e) => setSharePerm(e.target.value)}>
-                <option value="viewer">Viewer — can view only</option>
-                <option value="commenter">Commenter — can view and comment</option>
-                <option value="editor">Editor — can edit</option>
+              >
+                <option value="editor">Editor — Can edit content & add comments</option>
+                <option value="commenter">Commenter — Can view & add comments</option>
+                <option value="viewer">Viewer — Can view content only</option>
               </select>
-              {shareError && <div className="error-message">{shareError}</div>}
-              <button type="submit" className="btn btn-primary btn-sm">Share</button>
+
+              {shareError && <div className="error-message" style={{ fontSize: '0.8rem', color: 'red' }}>{shareError}</div>}
+              
+              <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 4 }}>
+                + Share Document
+              </button>
             </form>
 
             <div style={{ marginTop: 16 }}>
@@ -212,11 +277,23 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
                 <span>{collaborators.owner?.name} (Owner)</span>
               </div>
               {collaborators.collaborators?.map((c) => (
-                <div key={c.user._id} className="collaborator-item">
-                  <span>
-                    {c.user.name} <span className="badge">{c.permission}</span>
-                  </span>
-                  <button className="btn-icon" onClick={() => handleRemoveCollab(c.user._id)}>✕</button>
+                <div key={c.user._id} className="collaborator-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{c.user.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.user.email}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <select
+                      value={c.permission}
+                      onChange={(e) => handleUpdatePermission(c.user.email, e.target.value)}
+                      style={{ padding: '2px 6px', fontSize: '0.8rem', borderRadius: 4 }}
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="commenter">Commenter</option>
+                      <option value="editor">Editor</option>
+                    </select>
+                    <button className="btn-icon" title="Remove User" onClick={() => handleRemoveCollab(c.user._id)}>✕</button>
+                  </div>
                 </div>
               ))}
             </div>

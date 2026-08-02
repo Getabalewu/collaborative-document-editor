@@ -54,15 +54,18 @@ router.post('/', async (req, res) => {
 router.get('/search/users', async (req, res) => {
   try {
     const q = req.query.q?.trim();
-    if (!q || q.length < 2) {
-      return res.json({ users: [] });
+    const filter = { _id: { $ne: req.user._id } };
+
+    if (q && q.length > 0) {
+      filter.$or = [
+        { name: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } },
+      ];
     }
-    const users = await User.find({
-      email: { $regex: q, $options: 'i' },
-      _id: { $ne: req.user._id },
-    })
+
+    const users = await User.find(filter)
       .select('name email')
-      .limit(10);
+      .limit(20);
     res.json({ users });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -87,13 +90,23 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { doc, permission } = await getDocumentAccess(req.params.id, req.user._id);
-    if (!doc || !canEdit(permission)) {
-      return res.status(403).json({ error: 'You do not have permission to edit this document' });
+    if (!doc || !canView(permission)) {
+      return res.status(404).json({ error: 'Document not found' });
     }
 
     const updates = {};
-    if (req.body.title !== undefined) updates.title = req.body.title.trim();
-    if (req.body.content !== undefined) updates.content = req.body.content;
+    if (req.body.title !== undefined) {
+      if (permission !== 'owner') {
+        return res.status(403).json({ error: 'Only the owner can rename this document' });
+      }
+      updates.title = req.body.title.trim();
+    }
+    if (req.body.content !== undefined) {
+      if (!canEdit(permission)) {
+        return res.status(403).json({ error: 'You do not have permission to edit this document' });
+      }
+      updates.content = req.body.content;
+    }
 
     const updated = await Document.findByIdAndUpdate(req.params.id, updates, { new: true });
     res.json(updated);
@@ -145,7 +158,12 @@ router.post('/:id/save', async (req, res) => {
     const { content, title, createVersion } = req.body;
     const updates = {};
     if (content !== undefined) updates.content = content;
-    if (title !== undefined) updates.title = title.trim();
+    if (title !== undefined && title.trim() !== doc.title) {
+      if (permission !== 'owner') {
+        return res.status(403).json({ error: 'Only the owner can rename this document' });
+      }
+      updates.title = title.trim();
+    }
 
     const updated = await Document.findByIdAndUpdate(req.params.id, updates, { new: true });
 
@@ -184,8 +202,8 @@ router.get('/:id/versions', async (req, res) => {
 router.post('/:id/versions/:versionId/restore', async (req, res) => {
   try {
     const { doc, permission } = await getDocumentAccess(req.params.id, req.user._id);
-    if (!doc || !canEdit(permission)) {
-      return res.status(403).json({ error: 'You do not have permission to restore versions' });
+    if (!doc || permission !== 'owner') {
+      return res.status(403).json({ error: 'Only the owner can restore versions' });
     }
     const version = await DocumentVersion.findOne({
       _id: req.params.versionId,

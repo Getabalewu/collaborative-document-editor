@@ -54,6 +54,7 @@ export const api = {
   removeCollaborator: (docId, userId) =>
     request(`/documents/${docId}/share/${userId}`, { method: 'DELETE' }),
   getCollaborators: (id) => request(`/documents/${id}/collaborators`),
+  searchUsers: (q = '') => request(`/documents/search/users?q=${encodeURIComponent(q)}`),
 };
 
 export function getSocketUrl() {

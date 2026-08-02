@@ -5,21 +5,26 @@ export default function EditorToolbar({ editor, canEdit }) {
     const prev = editor.getAttributes('link').href;
     const url = window.prompt('Enter URL', prev || 'https://');
     if (url === null) return;
-    if (url === '') {
+    if (url.trim() === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
       return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
+  }
+
+  function unsetLink() {
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
   }
 
   return (
     <div className="editor-toolbar">
+      {/* Headings */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn ${editor.isActive('heading', { level: 1 }) ? 'active' : ''}`}
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           disabled={!canEdit}
-          title="Heading 1 (Ctrl+Alt+1)"
+          title="Heading 1"
         >
           H1
         </button>
@@ -41,6 +46,7 @@ export default function EditorToolbar({ editor, canEdit }) {
         </button>
       </div>
 
+      {/* Formatting Marks */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn ${editor.isActive('bold') ? 'active' : ''}`}
@@ -68,6 +74,7 @@ export default function EditorToolbar({ editor, canEdit }) {
         </button>
       </div>
 
+      {/* Lists */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`}
@@ -87,6 +94,7 @@ export default function EditorToolbar({ editor, canEdit }) {
         </button>
       </div>
 
+      {/* Text Alignment */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn ${editor.isActive({ textAlign: 'left' }) ? 'active' : ''}`}
@@ -94,7 +102,7 @@ export default function EditorToolbar({ editor, canEdit }) {
           disabled={!canEdit}
           title="Align Left"
         >
-          ⬅
+          Left
         </button>
         <button
           className={`toolbar-btn ${editor.isActive({ textAlign: 'center' }) ? 'active' : ''}`}
@@ -102,7 +110,7 @@ export default function EditorToolbar({ editor, canEdit }) {
           disabled={!canEdit}
           title="Align Center"
         >
-          ↔
+          Center
         </button>
         <button
           className={`toolbar-btn ${editor.isActive({ textAlign: 'right' }) ? 'active' : ''}`}
@@ -110,19 +118,38 @@ export default function EditorToolbar({ editor, canEdit }) {
           disabled={!canEdit}
           title="Align Right"
         >
-          ➡
+          Right
+        </button>
+        <button
+          className={`toolbar-btn ${editor.isActive({ textAlign: 'justify' }) ? 'active' : ''}`}
+          onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+          disabled={!canEdit}
+          title="Justify"
+        >
+          Justify
         </button>
       </div>
 
+      {/* Hyperlinks */}
       <div className="toolbar-group">
         <button
           className={`toolbar-btn ${editor.isActive('link') ? 'active' : ''}`}
           onClick={setLink}
           disabled={!canEdit}
-          title="Insert Link (Ctrl+K)"
+          title="Insert / Edit Link"
         >
-          🔗
+          🔗 Link
         </button>
+        {editor.isActive('link') && (
+          <button
+            className="toolbar-btn"
+            onClick={unsetLink}
+            disabled={!canEdit}
+            title="Remove Link"
+          >
+            ❌ Remove Link
+          </button>
+        )}
       </div>
     </div>
   );

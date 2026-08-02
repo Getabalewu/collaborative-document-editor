@@ -8,13 +8,18 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+import * as Y from 'yjs';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { htmlToMarkdown, markdownToHtml } from '../utils/markdown';
 import { SocketIOProvider } from '../hooks/useCollaboration';
 import EditorToolbar from '../components/EditorToolbar';
 import EditorSidebar from '../components/EditorSidebar';
+import NotificationBar from '../components/NotificationBar';
+import ShareModal from '../components/ShareModal';
 
-function CollaborativeEditor({ ydoc, provider, user, canEdit, onUpdate }) {
+function CollaborativeEditor({ ydoc, provider, user, canEdit, initialContent, onUpdate, onEditorReady }) {
   const userColor = getColor(user?.id || 'default');
 
   useEffect(() => {
@@ -35,8 +40,21 @@ function CollaborativeEditor({ ydoc, provider, user, canEdit, onUpdate }) {
       }),
     ],
     editable: canEdit,
+    content: initialContent,
     onUpdate,
   });
+
+  useEffect(() => {
+    if (!editor || !initialContent) return;
+    if (provider?.synced) return;
+
+    editor.commands.setContent(initialContent);
+  }, [editor, initialContent, provider]);
+
+  useEffect(() => {
+    if (!editor) return;
+    onEditorReady?.(editor);
+  }, [editor, onEditorReady]);
 
   useEffect(() => {
     if (editor) editor.setEditable(canEdit);
@@ -68,8 +86,14 @@ export default function Editor() {
   const [loading, setLoading] = useState(true);
   const [showSidebar, setShowSidebar] = useState(true);
   const [collabReady, setCollabReady] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [initialContent, setInitialContent] = useState('<p></p>');
+  const [notification, setNotification] = useState('');
+  const [editorInstance, setEditorInstance] = useState(null);
 
+  const { theme, toggleTheme } = useTheme();
   const ydocRef = useRef(null);
+  const markdownInputRef = useRef(null);
   const providerRef = useRef(null);
   const saveTimerRef = useRef(null);
   const titleTimerRef = useRef(null);
@@ -85,9 +109,11 @@ export default function Editor() {
         createVersion: false,
       });
       setSaveStatus('Saved');
+      setNotification('Document saved');
       setTimeout(() => setSaveStatus(''), 2000);
     } catch {
       setSaveStatus('Save failed');
+      setNotification('Save failed');
     }
   }, [id, title, canEdit]);
 
@@ -102,6 +128,35 @@ export default function Editor() {
     }, 1500);
   }, [canEdit, handleAutoSave]);
 
+  function handleExportMarkdown() {
+    if (!editorInstance) return;
+    const markdown = htmlToMarkdown(editorInstance.getHTML());
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title || 'document'}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setNotification('Markdown exported');
+  }
+
+  function handleImportClick() {
+    markdownInputRef.current?.click();
+  }
+
+  async function handleImportFile(file) {
+    if (!file) return;
+    const text = await file.text();
+    const html = markdownToHtml(text);
+    setInitialContent(html);
+    editorHtmlRef.current = html;
+    editorInstance?.commands?.setContent?.(html);
+    setNotification('Markdown imported');
+  }
+
   useEffect(() => {
     let mounted = true;
     const token = localStorage.getItem('token');
@@ -114,8 +169,9 @@ export default function Editor() {
         setTitle(doc.title);
         setPermission(perm);
         setCanEdit(['owner', 'editor'].includes(perm));
+        setInitialContent(doc.content || '<p></p>');
+        editorHtmlRef.current = doc.content || '<p></p>';
 
-        const { default: Y } = await import('yjs');
         const ydoc = new Y.Doc();
         ydocRef.current = ydoc;
 
@@ -139,6 +195,9 @@ export default function Editor() {
         });
         providerRef.current = provider;
         setLoading(false);
+        setTimeout(() => {
+          if (mounted) setCollabReady(true);
+        }, 300);
       } catch (err) {
         alert(err.message);
         navigate('/');
@@ -158,19 +217,30 @@ export default function Editor() {
       }
     }, 60000);
 
+    const handleShortcut = async (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (canEdit) {
+          await handleAutoSave();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+
     return () => {
       mounted = false;
       clearTimeout(saveTimerRef.current);
       clearTimeout(titleTimerRef.current);
       clearInterval(versionInterval);
+      window.removeEventListener('keydown', handleShortcut);
       providerRef.current?.destroy();
     };
-  }, [id, navigate]);
+  }, [id, navigate, canEdit, handleAutoSave]);
 
   function handleTitleChange(e) {
     const newTitle = e.target.value;
     setTitle(newTitle);
-    if (canEdit) {
+    if (permission === 'owner') {
       clearTimeout(titleTimerRef.current);
       titleTimerRef.current = setTimeout(async () => {
         try {
@@ -200,10 +270,27 @@ export default function Editor() {
           className="editor-title-input"
           value={title}
           onChange={handleTitleChange}
-          disabled={!canEdit}
+          disabled={permission !== 'owner'}
+          title={permission !== 'owner' ? 'Only the document owner can rename' : ''}
           placeholder="Document title"
         />
         <div className="editor-header-actions">
+          <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportMarkdown} disabled={!editorInstance}>
+            Export MD
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleImportClick}>
+            Import MD
+          </button>
+          <input
+            ref={markdownInputRef}
+            type="file"
+            accept=".md,text/markdown"
+            style={{ display: 'none' }}
+            onChange={(e) => handleImportFile(e.target.files?.[0])}
+          />
           <span className={`save-status ${saveStatus === 'Saved' ? 'saved' : ''}`}>
             {saveStatus}
           </span>
@@ -219,15 +306,25 @@ export default function Editor() {
               </div>
             ))}
           </div>
+          {permission === 'owner' && (
+            <button className="btn btn-primary btn-sm" onClick={() => setShowShareModal(true)}>
+              👥 Share
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setShowSidebar((s) => !s)}>
             {showSidebar ? 'Hide Panel' : 'Show Panel'}
           </button>
         </div>
       </header>
 
-      {!canEdit && (
+      {permission !== 'owner' && (
         <div className="readonly-banner">
-          You have {permission} access — editing is disabled.
+          Role: <strong>{permission.toUpperCase()}</strong> —{' '}
+          {permission === 'editor'
+            ? 'You can edit content (Only the Owner can rename, share, or restore versions).'
+            : permission === 'commenter'
+            ? 'You can view content and add comments.'
+            : 'You have view-only access.'}
         </div>
       )}
 
@@ -237,6 +334,7 @@ export default function Editor() {
         </div>
       )}
 
+      <NotificationBar message={notification} />
       <div className="editor-body">
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <CollaborativeEditor
@@ -244,7 +342,9 @@ export default function Editor() {
             provider={providerRef.current}
             user={user}
             canEdit={canEdit}
+            initialContent={initialContent}
             onUpdate={handleEditorUpdate}
+            onEditorReady={setEditorInstance}
           />
         </div>
         {showSidebar && (

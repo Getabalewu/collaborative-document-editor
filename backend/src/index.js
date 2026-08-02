@@ -33,15 +33,28 @@ app.use('/api/documents/:id/comments', commentRoutes);
 io.use(socketAuth);
 setupCollaboration(io);
 
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
+
+async function startServer() {
+  server.listen(PORT, () => {
+    console.log(`SyncWrite API running on http://localhost:${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('Server error:', err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Stop the existing process before restarting the server.`);
+    }
+    process.exit(1);
+  });
+}
 
 connectDB()
   .then(() => {
-    server.listen(PORT, () => {
-      console.log(`SyncWrite API running on http://localhost:${PORT}`);
-    });
+    startServer();
   })
   .catch((err) => {
-    console.error('Failed to start server:', err.message);
-    process.exit(1);
+    console.error('Warning: MongoDB connection failed:', err.message);
+    console.error('Starting API in degraded mode without DB. Some features will be disabled.');
+    startServer();
   });

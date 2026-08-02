@@ -27,3 +27,8 @@ export function canComment(permission) {
 export function canEdit(permission) {
   return ['owner', 'editor'].includes(permission);
 }
+
+export function isOwner(permission) {
+  return permission === 'owner';
+}
+

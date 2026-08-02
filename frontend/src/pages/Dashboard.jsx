@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { api } from '../api/client';
+import ShareModal from '../components/ShareModal';
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, {
@@ -21,6 +23,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [renameId, setRenameId] = useState(null);
   const [renameTitle, setRenameTitle] = useState('');
+  const [shareDoc, setShareDoc] = useState(null);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -95,6 +98,9 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <span className="logo">SyncWrite</span>
         <div className="user-info">
+          <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
           <span className="user-name">{user?.name}</span>
           <button className="btn btn-secondary btn-sm" onClick={logout}>
             Logout
@@ -124,14 +130,16 @@ export default function Dashboard() {
           <div className="empty-state">
             <h3>No documents yet</h3>
             <p>Create your first document to get started.</p>
-            <button className="btn btn-primary" onClick={handleCreate} style={{ marginTop: 16 }}>
-              + New Document
-            </button>
           </div>
         ) : (
           <div className="doc-list">
             {filtered.map((doc) => (
-              <div key={doc._id} className="doc-item">
+              <div
+                key={doc._id}
+                className="doc-item"
+                onDoubleClick={() => navigate(`/doc/${doc._id}`)}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="doc-item-info" onClick={() => navigate(`/doc/${doc._id}`)}>
                   <div className="doc-item-title">
                     {doc.title}
@@ -145,9 +153,23 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="doc-item-actions">
-                  <button className="btn-icon" title="Rename" onClick={(e) => startRename(doc, e)}>
-                    ✏️
-                  </button>
+                  {doc.role === 'owner' && (
+                    <button
+                      className="btn-icon"
+                      title="Share Document"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShareDoc(doc);
+                      }}
+                    >
+                      👥
+                    </button>
+                  )}
+                  {doc.role === 'owner' && (
+                    <button className="btn-icon" title="Rename" onClick={(e) => startRename(doc, e)}>
+                      ✏️
+                    </button>
+                  )}
                   <button className="btn-icon" title="Duplicate" onClick={(e) => handleDuplicate(doc._id, e)}>
                     📋
                   </button>
@@ -181,6 +203,14 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {shareDoc && (
+        <ShareModal
+          documentId={shareDoc._id}
+          documentTitle={shareDoc.title}
+          onClose={() => setShareDoc(null)}
+        />
       )}
     </div>
   );
