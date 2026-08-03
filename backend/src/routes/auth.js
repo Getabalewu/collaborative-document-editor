@@ -1,9 +1,45 @@
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { Router } from 'express';
 import User from '../models/User.js';
 import { signToken, authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: parseInt(process.env.EMAIL_PORT, 10) || 587,
+  secure: process.env.EMAIL_SECURE === 'true',
+  auth: process.env.EMAIL_USER
+    ? {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      }
+    : undefined,
+});
+
+async function sendResetEmail(to, resetUrl) {
+  if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return false;
+  }
+
+  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+
+  await transporter.sendMail({
+    from: fromAddress,
+    to,
+    subject: 'SyncWrite password reset request',
+    html: `
+      <p>Hello,</p>
+      <p>We received a request to reset your SyncWrite password.</p>
+      <p><a href="${resetUrl}">Click here to reset your password</a></p>
+      <p>If you did not request a password reset, you can safely ignore this email.</p>
+      <p>Thanks,<br/>SyncWrite Team</p>
+    `,
+  });
+
+  return true;
+}
 
 router.post('/register', async (req, res) => {
   try {
@@ -66,10 +102,15 @@ router.post('/forgot-password', async (req, res) => {
     const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
+    const emailSent = await sendResetEmail(user.email, resetUrl);
+
     res.json({
-      message: 'Password reset link generated. Use the token or click the reset link to continue.',
+      message: emailSent
+        ? 'Password reset email sent. Please check your inbox.'
+        : 'Password reset link generated. Use the token or click the reset link to continue.',
       resetToken,
       resetUrl,
+      emailSent,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
