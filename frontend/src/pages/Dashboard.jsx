@@ -17,6 +17,7 @@ function formatDate(dateStr) {
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,27 +156,26 @@ export default function Dashboard() {
                 <div className="doc-item-actions">
                   {doc.role === 'owner' && (
                     <button
-                      className="btn-icon"
-                      title="Share Document"
+                      className="btn btn-secondary btn-sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShareDoc(doc);
                       }}
                     >
-                      👥
+                      Share
                     </button>
                   )}
                   {doc.role === 'owner' && (
-                    <button className="btn-icon" title="Rename" onClick={(e) => startRename(doc, e)}>
-                      ✏️
+                    <button className="btn btn-secondary btn-sm" onClick={(e) => startRename(doc, e)}>
+                      Edit
                     </button>
                   )}
-                  <button className="btn-icon" title="Duplicate" onClick={(e) => handleDuplicate(doc._id, e)}>
-                    📋
+                  <button className="btn btn-secondary btn-sm" onClick={(e) => handleDuplicate(doc._id, e)}>
+                    Duplicate
                   </button>
                   {doc.role === 'owner' && (
-                    <button className="btn-icon" title="Delete" onClick={(e) => handleDelete(doc._id, e)}>
-                      🗑️
+                    <button className="btn btn-secondary btn-sm" onClick={(e) => handleDelete(doc._id, e)}>
+                      Delete
                     </button>
                   )}
                 </div>

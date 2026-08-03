@@ -1,22 +1,22 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import { api } from '../api/client';
 
-export default function Login() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
+export default function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
+
     try {
-      await login(email, password);
-      navigate('/');
+      const response = await api.forgotPassword({ email });
+      setSuccess(response.message || 'If that email exists, a reset link has been sent.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -27,9 +27,10 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>SyncWrite</h1>
-        <p className="subtitle">Sign in to your account</p>
+        <h1>Forgot Password</h1>
+        <p className="subtitle">Enter your email to receive a password reset link.</p>
         {error && <div className="error-message">{error}</div>}
+        {success && <div className="success-message">{success}</div>}
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email</label>
@@ -42,28 +43,12 @@ export default function Login() {
               autoComplete="email"
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Sending...' : 'Send reset link'}
           </button>
         </form>
-        <div className="auth-actions">
-          <Link to="/forgot-password" className="btn btn-secondary">
-            Forgot password?
-          </Link>
-        </div>
         <p className="auth-footer">
-          Don&apos;t have an account? <Link to="/register">Create one</Link>
+          Remembered your password? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

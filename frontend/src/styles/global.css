@@ -187,6 +187,21 @@ input, textarea {
   font-size: 0.875rem;
 }
 
+.success-message {
+  background: #ecfdf5;
+  color: #166534;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+  gap: 12px;
+}
+
 .auth-footer {
   margin-top: 24px;
   text-align: center;

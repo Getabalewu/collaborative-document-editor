@@ -49,6 +49,8 @@ export const api = {
   deleteComment: (docId, commentId) =>
     request(`/documents/${docId}/comments/${commentId}`, { method: 'DELETE' }),
 
+  forgotPassword: (body) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) }),
+  resetPassword: (body) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(body) }),
   shareDocument: (id, email, permission) =>
     request(`/documents/${id}/share`, { method: 'POST', body: JSON.stringify({ email, permission }) }),
   removeCollaborator: (docId, userId) =>
