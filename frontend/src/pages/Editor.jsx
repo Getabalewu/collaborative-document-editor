@@ -7,7 +7,6 @@ import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import * as Y from 'yjs';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -27,18 +26,20 @@ function CollaborativeEditor({ ydoc, provider, user, canEdit, initialContent, on
   }, [provider, user, userColor]);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ history: false }),
-      Underline,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Link.configure({ openOnClick: false, autolink: true }),
-      Placeholder.configure({ placeholder: 'Start writing...' }),
-      Collaboration.configure({ document: ydoc }),
-      CollaborationCursor.configure({
-        provider,
-        user: { name: user?.name, color: userColor },
-      }),
-    ],
+    extensions: (() => {
+      const exts = [
+        StarterKit.configure({ history: false }),
+        Underline,
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Link.configure({ openOnClick: false, autolink: true }),
+        Placeholder.configure({ placeholder: 'Start writing...' }),
+        Collaboration.configure({ document: ydoc }),
+      ];
+
+
+
+      return exts;
+    })(),
     editable: canEdit,
     content: initialContent,
     onUpdate,
@@ -96,6 +97,7 @@ export default function Editor() {
   const markdownInputRef = useRef(null);
   const providerRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const typingTimerRef = useRef(null);
   const titleTimerRef = useRef(null);
   const editorHtmlRef = useRef('');
 
@@ -120,10 +122,24 @@ export default function Editor() {
   const handleEditorUpdate = useCallback(({ editor }) => {
     if (!canEdit) return;
     editorHtmlRef.current = editor.getHTML();
-    providerRef.current?.emitTyping(true);
+    // typing indicator: emit start and debounce stop separately from autosave
+    if (providerRef.current) {
+      try {
+        providerRef.current.emitTyping(true);
+      } catch (e) {}
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        try {
+          providerRef.current.emitTyping(false);
+        } catch (e) {}
+      }, 1200);
+    }
+
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      providerRef.current?.emitTyping(false);
+      try {
+        providerRef.current?.emitTyping(false);
+      } catch (e) {}
       handleAutoSave();
     }, 1500);
   }, [canEdit, handleAutoSave]);
@@ -230,9 +246,13 @@ export default function Editor() {
     return () => {
       mounted = false;
       clearTimeout(saveTimerRef.current);
+      clearTimeout(typingTimerRef.current);
       clearTimeout(titleTimerRef.current);
       clearInterval(versionInterval);
       window.removeEventListener('keydown', handleShortcut);
+      try {
+        providerRef.current?.emitTyping(false);
+      } catch (e) {}
       providerRef.current?.destroy();
     };
   }, [id, navigate, canEdit, handleAutoSave]);
@@ -256,7 +276,7 @@ export default function Editor() {
     return name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '?';
   }
 
-  if (loading || !collabReady) {
+  if (loading || !collabReady || !providerRef.current || !providerRef.current.awareness) {
     return <div className="loading-screen">Loading document...</div>;
   }
 

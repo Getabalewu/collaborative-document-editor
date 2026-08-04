@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [renameId, setRenameId] = useState(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [shareDoc, setShareDoc] = useState(null);
+  const [openMenuId, setOpenMenuId] = useState(null);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -90,6 +91,26 @@ export default function Dashboard() {
     }
   }
 
+  function toggleActionsMenu(e, id) {
+    e.stopPropagation();
+    setOpenMenuId((prev) => (prev === id ? null : id));
+  }
+
+  useEffect(() => {
+    function handleWindowClick() {
+      setOpenMenuId(null);
+    }
+    function handleKey(e) {
+      if (e.key === 'Escape') setOpenMenuId(null);
+    }
+    window.addEventListener('click', handleWindowClick);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, []);
+
   const filtered = documents.filter((d) =>
     d.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -154,29 +175,82 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="doc-item-actions">
-                  {doc.role === 'owner' && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShareDoc(doc);
-                      }}
-                    >
-                      Share
-                    </button>
-                  )}
-                  {doc.role === 'owner' && (
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => startRename(doc, e)}>
-                      Edit
-                    </button>
-                  )}
-                  <button className="btn btn-secondary btn-sm" onClick={(e) => handleDuplicate(doc._id, e)}>
-                    Duplicate
+                  <button
+                    className="doc-actions-toggle btn-icon"
+                    aria-haspopup="true"
+                    aria-label="Open document actions"
+                    aria-expanded={openMenuId === doc._id}
+                    onClick={(e) => toggleActionsMenu(e, doc._id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleActionsMenu(e, doc._id);
+                      }
+                    }}
+                  >
+                    ⋯
                   </button>
-                  {doc.role === 'owner' && (
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => handleDelete(doc._id, e)}>
-                      Delete
-                    </button>
+
+                  {openMenuId === doc._id && (
+                    <div className="doc-actions-menu" onClick={(e) => e.stopPropagation()} role="menu">
+                      {doc.role === 'owner' && (
+                        <button
+                          className="doc-actions-item"
+                          role="menuitem"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShareDoc(doc);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <span className="action-icon">👥</span>
+                          <span>Share</span>
+                        </button>
+                      )}
+
+                      {doc.role === 'owner' && (
+                        <button
+                          className="doc-actions-item"
+                          role="menuitem"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(doc, e);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <span className="action-icon">✏️</span>
+                          <span>Edit</span>
+                        </button>
+                      )}
+
+                      <button
+                        className="doc-actions-item"
+                        role="menuitem"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicate(doc._id, e);
+                          setOpenMenuId(null);
+                        }}
+                      >
+                        <span className="action-icon">📋</span>
+                        <span>Duplicate</span>
+                      </button>
+
+                      {doc.role === 'owner' && (
+                        <button
+                          className="doc-actions-item"
+                          role="menuitem"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(doc._id, e);
+                            setOpenMenuId(null);
+                          }}
+                        >
+                          <span className="action-icon">🗑️</span>
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

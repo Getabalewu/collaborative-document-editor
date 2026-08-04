@@ -307,6 +307,70 @@ input, textarea {
   gap: 4px;
 }
 
+/* Actions dropdown */
+.doc-actions-toggle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 1.1rem;
+}
+
+.doc-actions-toggle:hover {
+  background: var(--bg);
+}
+
+.doc-actions-menu {
+  position: absolute;
+  z-index: 40;
+  right: 24px;
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-actions-item {
+  background: transparent;
+  border: none;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.doc-actions-item:hover {
+  background: var(--bg);
+}
+
+.action-icon {
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+/* position helper for each doc item */
+.doc-item {
+  position: relative;
+}
+
 .badge {
   display: inline-block;
   padding: 2px 8px;
@@ -396,6 +460,120 @@ input, textarea {
   color: var(--text-muted);
   font-style: italic;
   padding: 0 24px 8px;
+}
+
+/* Responsive adjustments (non-destructive addition) */
+/* Tablet */
+@media (max-width: 1024px) {
+  .dashboard-main {
+    max-width: 900px;
+    padding: 28px 20px;
+  }
+
+  .dashboard-header {
+    padding: 12px 20px;
+  }
+
+  .dashboard-toolbar {
+    gap: 8px;
+  }
+
+  .search-input {
+    width: 180px;
+  }
+
+  .doc-item {
+    padding: 14px 16px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .dashboard-header {
+    padding: 10px 16px;
+  }
+
+  .dashboard-main {
+    max-width: 100%;
+    padding: 20px 16px;
+  }
+
+  .dashboard-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .dashboard-toolbar h2 {
+    margin-bottom: 4px;
+  }
+
+  .dashboard-toolbar > div {
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .search-input {
+    width: 100%;
+    max-width: none;
+  }
+
+  .doc-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .doc-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .doc-item-info {
+    width: 100%;
+  }
+
+  .doc-item-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .btn, .btn-sm {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .dropdown-menu {
+    left: 8px !important;
+    right: 8px !important;
+    min-width: auto !important;
+  }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .dashboard-header .logo {
+    font-size: 1rem;
+  }
+
+  .dashboard-header .user-info {
+    gap: 8px;
+  }
+
+  .auth-card {
+    padding: 28px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    padding: 12px 14px;
+  }
 }
 
 .editor-toolbar {

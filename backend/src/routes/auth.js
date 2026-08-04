@@ -25,20 +25,24 @@ async function sendResetEmail(to, resetUrl) {
 
   const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
 
-  await transporter.sendMail({
-    from: fromAddress,
-    to,
-    subject: 'SyncWrite password reset request',
-    html: `
-      <p>Hello,</p>
-      <p>We received a request to reset your SyncWrite password.</p>
-      <p><a href="${resetUrl}">Click here to reset your password</a></p>
-      <p>If you did not request a password reset, you can safely ignore this email.</p>
-      <p>Thanks,<br/>SyncWrite Team</p>
-    `,
-  });
-
-  return true;
+  try {
+    await transporter.sendMail({
+      from: fromAddress,
+      to,
+      subject: 'SyncWrite password reset request',
+      html: `
+        <p>Hello,</p>
+        <p>We received a request to reset your SyncWrite password.</p>
+        <p><a href="${resetUrl}">Click here to reset your password</a></p>
+        <p>If you did not request a password reset, you can safely ignore this email.</p>
+        <p>Thanks,<br/>SyncWrite Team</p>
+      `,
+    });
+    return true;
+  } catch (err) {
+    console.error('Failed to send reset email:', err?.message || err);
+    return false;
+  }
 }
 
 router.post('/register', async (req, res) => {
