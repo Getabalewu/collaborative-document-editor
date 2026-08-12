@@ -7,7 +7,7 @@
   "scripts": {
     "build": "echo \"Backend build complete\"",
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch-path=src --watch src/index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

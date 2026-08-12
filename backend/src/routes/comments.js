@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
     }
     const comments = await Comment.find({ document: doc._id })
       .populate('author', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 });
     res.json({ comments });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -31,10 +31,21 @@ router.post('/', async (req, res) => {
     if (!text) {
       return res.status(400).json({ error: 'Comment text is required' });
     }
+    const parent = req.body.parent || null;
+    if (parent) {
+      const parentComment = await Comment.findOne({ _id: parent, document: doc._id });
+      if (!parentComment) {
+        return res.status(404).json({ error: 'Parent comment not found' });
+      }
+      if (parentComment.parent) {
+        return res.status(400).json({ error: 'Replies cannot be nested further' });
+      }
+    }
     const comment = await Comment.create({
       document: doc._id,
       author: req.user._id,
       text,
+      parent,
     });
     const populated = await Comment.findById(comment._id).populate('author', 'name email');
     res.status(201).json(populated);
@@ -81,6 +92,7 @@ router.delete('/:commentId', async (req, res) => {
     if (!isAuthor && permission !== 'owner') {
       return res.status(403).json({ error: 'Permission denied' });
     }
+    await Comment.deleteMany({ parent: comment._id });
     await comment.deleteOne();
     res.json({ message: 'Comment deleted' });
   } catch (err) {

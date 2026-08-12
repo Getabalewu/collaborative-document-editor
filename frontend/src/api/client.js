@@ -30,8 +30,10 @@ export const api = {
   me: () => request('/auth/me'),
 
   getDocuments: () => request('/documents'),
+  getRecentDocuments: () => request('/documents/recent'),
   createDocument: (title) => request('/documents', { method: 'POST', body: JSON.stringify({ title }) }),
   getDocument: (id) => request(`/documents/${id}`),
+  openDocument: (id) => request(`/documents/${id}/open`, { method: 'POST' }),
   updateDocument: (id, body) => request(`/documents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteDocument: (id) => request(`/documents/${id}`, { method: 'DELETE' }),
   duplicateDocument: (id) => request(`/documents/${id}/duplicate`, { method: 'POST' }),
@@ -42,8 +44,8 @@ export const api = {
     request(`/documents/${docId}/versions/${versionId}/restore`, { method: 'POST' }),
 
   getComments: (id) => request(`/documents/${id}/comments`),
-  addComment: (id, text) =>
-    request(`/documents/${id}/comments`, { method: 'POST', body: JSON.stringify({ text }) }),
+  addComment: (id, text, parent = null) =>
+    request(`/documents/${id}/comments`, { method: 'POST', body: JSON.stringify({ text, parent }) }),
   updateComment: (docId, commentId, body) =>
     request(`/documents/${docId}/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteComment: (docId, commentId) =>

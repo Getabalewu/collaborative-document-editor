@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
-import { connectDB } from './config/db.js';
+import { connectDB, isDbConnected } from './config/db.js';
 import { socketAuth } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import documentRoutes from './routes/documents.js';
@@ -14,16 +14,50 @@ const app = express();
 const server = http.createServer(app);
 
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = clientUrl
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin, callback) {
+  if (!origin || allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+  // Always allow local development origins regardless of CLIENT_URL.
+  try {
+    const { protocol, hostname } = new URL(origin);
+    const isLocal =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]';
+    if (protocol === 'http:' && isLocal) {
+      return callback(null, true);
+    }
+  } catch {
+    /* fall through */
+  }
+  return callback(null, false);
+}
 
 const io = new Server(server, {
-  cors: { origin: clientUrl, credentials: true },
+  cors: { origin: isAllowedOrigin, credentials: true },
 });
 
-app.use(cors({ origin: clientUrl, credentials: true }));
+app.use(
+  cors({
+    origin: isAllowedOrigin,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  const dbConnected = isDbConnected();
+  res.status(dbConnected ? 200 : 503).json({
+    status: dbConnected ? 'ok' : 'degraded',
+    db: dbConnected ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use('/api/auth', authRoutes);

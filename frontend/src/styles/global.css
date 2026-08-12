@@ -394,6 +394,60 @@ input, textarea {
   color: var(--text);
 }
 
+/* Recently opened */
+.recent-section {
+  margin-bottom: 28px;
+}
+
+.recent-section h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.recent-chip:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--primary);
+}
+
+.recent-chip-title {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-chip-role {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: #eef2ff;
+  border-radius: 12px;
+  padding: 2px 8px;
+}
+
 /* Editor */
 .editor-page {
   min-height: 100vh;
@@ -759,6 +813,23 @@ input, textarea {
   resize: vertical;
   min-height: 60px;
   font-size: 0.875rem;
+}
+
+.comment-reply {
+  margin-left: 20px;
+  margin-top: 8px;
+  padding: 10px;
+  border-left: 2px solid var(--primary);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.reply-form {
+  margin: 10px 0 6px 20px;
+}
+
+.reply-form textarea {
+  min-height: 44px;
 }
 
 .version-item {

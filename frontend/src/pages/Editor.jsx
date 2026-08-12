@@ -7,6 +7,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import * as Y from 'yjs';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -34,9 +35,11 @@ function CollaborativeEditor({ ydoc, provider, user, canEdit, initialContent, on
         Link.configure({ openOnClick: false, autolink: true }),
         Placeholder.configure({ placeholder: 'Start writing...' }),
         Collaboration.configure({ document: ydoc }),
+        CollaborationCursor.configure({
+          provider,
+          user: { name: user?.name, color: userColor },
+        }),
       ];
-
-
 
       return exts;
     })(),
@@ -44,13 +47,6 @@ function CollaborativeEditor({ ydoc, provider, user, canEdit, initialContent, on
     content: initialContent,
     onUpdate,
   });
-
-  useEffect(() => {
-    if (!editor || !initialContent) return;
-    if (provider?.synced) return;
-
-    editor.commands.setContent(initialContent);
-  }, [editor, initialContent, provider]);
 
   useEffect(() => {
     if (!editor) return;
@@ -100,14 +96,24 @@ export default function Editor() {
   const typingTimerRef = useRef(null);
   const titleTimerRef = useRef(null);
   const editorHtmlRef = useRef('');
+  const canEditRef = useRef(false);
+  const titleRef = useRef('Untitled Document');
+
+  useEffect(() => {
+    titleRef.current = title;
+  }, [title]);
+
+  useEffect(() => {
+    canEditRef.current = canEdit;
+  }, [canEdit]);
 
   const handleAutoSave = useCallback(async () => {
-    if (!canEdit) return;
+    if (!canEditRef.current) return;
     setSaveStatus('Saving...');
     try {
       await api.saveDocument(id, {
         content: editorHtmlRef.current,
-        title,
+        title: titleRef.current,
         createVersion: false,
       });
       setSaveStatus('Saved');
@@ -117,10 +123,10 @@ export default function Editor() {
       setSaveStatus('Save failed');
       setNotification('Save failed');
     }
-  }, [id, title, canEdit]);
+  }, [id]);
 
   const handleEditorUpdate = useCallback(({ editor }) => {
-    if (!canEdit) return;
+    if (!canEditRef.current) return;
     editorHtmlRef.current = editor.getHTML();
     // typing indicator: emit start and debounce stop separately from autosave
     if (providerRef.current) {
@@ -142,7 +148,7 @@ export default function Editor() {
       } catch (e) {}
       handleAutoSave();
     }, 1500);
-  }, [canEdit, handleAutoSave]);
+  }, [handleAutoSave]);
 
   function handleExportMarkdown() {
     if (!editorInstance) return;
@@ -179,14 +185,19 @@ export default function Editor() {
 
     async function init() {
       try {
-        const { document: doc, permission: perm } = await api.getDocument(id);
+        const { document: doc, permission: perm, hasYjsState } = await api.getDocument(id);
         if (!mounted) return;
 
         setTitle(doc.title);
         setPermission(perm);
-        setCanEdit(['owner', 'editor'].includes(perm));
-        setInitialContent(doc.content || '<p></p>');
+        const editable = ['owner', 'editor'].includes(perm);
+        setCanEdit(editable);
+        canEditRef.current = editable;
+        // Only seed from HTML when the doc has no collaborative (Yjs) state yet.
+        setInitialContent(hasYjsState ? '' : doc.content || '<p></p>');
         editorHtmlRef.current = doc.content || '<p></p>';
+
+        api.openDocument(id).catch(() => {});
 
         const ydoc = new Y.Doc();
         ydocRef.current = ydoc;
@@ -199,6 +210,7 @@ export default function Editor() {
           onPermission: ({ permission: p, canEdit: ce }) => {
             setPermission(p);
             setCanEdit(ce);
+            canEditRef.current = ce;
           },
           onPresence: (users) => setPresence(users),
           onTyping: ({ name, isTyping }) => {
@@ -208,6 +220,15 @@ export default function Editor() {
             });
           },
           onError: (msg) => console.error(msg),
+          onRestore: async () => {
+            try {
+              const { document: refreshed } = await api.getDocument(id);
+              if (mounted) setTitle(refreshed.title);
+            } catch (e) {
+              console.error(e);
+            }
+            setNotification('Version restored');
+          },
         });
         providerRef.current = provider;
         setLoading(false);
@@ -223,12 +244,14 @@ export default function Editor() {
     init();
 
     const versionInterval = setInterval(() => {
-      if (editorHtmlRef.current) {
+      if (editorHtmlRef.current && ydocRef.current) {
+        const yjsState = Array.from(Y.encodeStateAsUpdate(ydocRef.current));
         api.saveDocument(id, {
           content: editorHtmlRef.current,
-          title,
+          title: titleRef.current,
           createVersion: true,
           versionLabel: 'Auto-save',
+          yjsState,
         }).catch(() => {});
       }
     }, 60000);
@@ -236,7 +259,7 @@ export default function Editor() {
     const handleShortcut = async (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        if (canEdit) {
+        if (canEditRef.current) {
           await handleAutoSave();
         }
       }
@@ -254,8 +277,9 @@ export default function Editor() {
         providerRef.current?.emitTyping(false);
       } catch (e) {}
       providerRef.current?.destroy();
+      providerRef.current = null;
     };
-  }, [id, navigate, canEdit, handleAutoSave]);
+  }, [id, navigate, handleAutoSave]);
 
   function handleTitleChange(e) {
     const newTitle = e.target.value;

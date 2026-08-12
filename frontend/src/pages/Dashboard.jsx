@@ -20,6 +20,7 @@ export default function Dashboard() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
+  const [recentDocuments, setRecentDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [renameId, setRenameId] = useState(null);
@@ -29,8 +30,12 @@ export default function Dashboard() {
 
   const loadDocuments = useCallback(async () => {
     try {
-      const { documents: docs } = await api.getDocuments();
+      const [{ documents: docs }, { documents: recent }] = await Promise.all([
+        api.getDocuments(),
+        api.getRecentDocuments().catch(() => ({ documents: [] })),
+      ]);
       setDocuments(docs);
+      setRecentDocuments(recent);
     } catch (err) {
       console.error(err);
     } finally {
@@ -145,6 +150,27 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {!loading && recentDocuments.length > 0 && (
+          <section className="recent-section">
+            <h3>Recently Opened</h3>
+            <div className="recent-list">
+              {recentDocuments.map((doc) => (
+                <div
+                  key={doc._id}
+                  className="recent-chip"
+                  onClick={() => navigate(`/doc/${doc._id}`)}
+                  title={`${doc.title} — ${doc.owner?.name || 'You'}`}
+                >
+                  <span className="recent-chip-title">{doc.title}</span>
+                  <span className="recent-chip-role">
+                    {doc.role !== 'owner' ? doc.role : 'Owner'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {loading ? (
           <div className="empty-state">Loading documents...</div>

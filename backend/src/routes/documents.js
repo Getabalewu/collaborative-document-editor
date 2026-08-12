@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import Document from '../models/Document.js';
 import DocumentVersion from '../models/DocumentVersion.js';
+import RecentDocument from '../models/RecentDocument.js';
 import User from '../models/User.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getDocumentAccess, canView, canEdit } from '../utils/permissions.js';
+import { broadcastRestoreToRoom } from '../socket/collaboration.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -32,6 +34,35 @@ router.get('/', async (req, res) => {
     });
 
     res.json({ documents: [...ownedDocs, ...sharedDocs] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/recent', async (req, res) => {
+  try {
+    const recent = await RecentDocument.find({ user: req.user._id })
+      .populate({
+        path: 'document',
+        select: 'title updatedAt createdAt owner collaborators',
+        populate: { path: 'owner', select: 'name email' },
+      })
+      .sort({ openedAt: -1 })
+      .limit(10)
+      .lean();
+
+    const documents = recent
+      .filter((r) => r.document)
+      .map((r) => {
+        const doc = r.document;
+        const isOwner = doc.owner?._id?.toString() === req.user._id.toString();
+        const collab = (doc.collaborators || []).find(
+          (c) => c.user?.toString?.() === req.user._id.toString()
+        );
+        return { ...doc, role: isOwner ? 'owner' : collab?.permission || 'viewer' };
+      });
+
+    res.json({ documents });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -81,7 +112,24 @@ router.get('/:id', async (req, res) => {
     const populated = await Document.findById(doc._id)
       .populate('owner', 'name email')
       .populate('collaborators.user', 'name email');
-    res.json({ document: populated, permission });
+    res.json({ document: populated, permission, hasYjsState: Boolean(populated.yjsState?.length) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/open', async (req, res) => {
+  try {
+    const { doc, permission } = await getDocumentAccess(req.params.id, req.user._id);
+    if (!doc || !canView(permission)) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    await RecentDocument.updateOne(
+      { user: req.user._id, document: doc._id },
+      { $set: { openedAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ message: 'Recorded' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -155,9 +203,10 @@ router.post('/:id/save', async (req, res) => {
       return res.status(403).json({ error: 'You do not have permission to save this document' });
     }
 
-    const { content, title, createVersion } = req.body;
+    const { content, title, createVersion, yjsState } = req.body;
     const updates = {};
     if (content !== undefined) updates.content = content;
+    if (yjsState !== undefined) updates.yjsState = Buffer.from(yjsState);
     if (title !== undefined && title.trim() !== doc.title) {
       if (permission !== 'owner') {
         return res.status(403).json({ error: 'Only the owner can rename this document' });
@@ -172,6 +221,7 @@ router.post('/:id/save', async (req, res) => {
         document: doc._id,
         title: updated.title,
         content: updated.content,
+        yjsState: yjsState !== undefined ? Buffer.from(yjsState) : updated.yjsState,
         savedBy: req.user._id,
         label: req.body.versionLabel || 'Auto-save',
       });
@@ -190,6 +240,7 @@ router.get('/:id/versions', async (req, res) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     const versions = await DocumentVersion.find({ document: doc._id })
+      .select('-yjsState')
       .populate('savedBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(50);
@@ -202,8 +253,8 @@ router.get('/:id/versions', async (req, res) => {
 router.post('/:id/versions/:versionId/restore', async (req, res) => {
   try {
     const { doc, permission } = await getDocumentAccess(req.params.id, req.user._id);
-    if (!doc || permission !== 'owner') {
-      return res.status(403).json({ error: 'Only the owner can restore versions' });
+    if (!doc || !canEdit(permission)) {
+      return res.status(403).json({ error: 'You do not have permission to restore versions' });
     }
     const version = await DocumentVersion.findOne({
       _id: req.params.versionId,
@@ -217,15 +268,22 @@ router.post('/:id/versions/:versionId/restore', async (req, res) => {
       document: doc._id,
       title: doc.title,
       content: doc.content,
+      yjsState: doc.yjsState,
       savedBy: req.user._id,
       label: 'Before restore',
     });
 
-    const updated = await Document.findByIdAndUpdate(
-      doc._id,
-      { content: version.content, title: version.title },
-      { new: true }
-    );
+    const updates = { content: version.content, title: version.title };
+    if (version.yjsState?.length) {
+      updates.yjsState = version.yjsState;
+    }
+    const updated = await Document.findByIdAndUpdate(doc._id, updates, { new: true });
+
+    if (version.yjsState?.length) {
+      const state = Array.from(new Uint8Array(version.yjsState));
+      broadcastRestoreToRoom(doc._id.toString(), state);
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

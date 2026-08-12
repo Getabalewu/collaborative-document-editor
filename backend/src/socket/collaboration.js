@@ -5,6 +5,7 @@ import { getDocumentAccess, canEdit, canView } from '../utils/permissions.js';
 
 const docs = new Map();
 const saveTimers = new Map();
+let ioRef = null;
 
 function getUserColor(userId) {
   const colors = [
@@ -61,17 +62,28 @@ function broadcastPresence(io, documentId, entry) {
   io.to(`doc:${documentId}`).emit('presence-update', { users });
 }
 
-export function setupCollaboration(io) {
-  io.on('connection', async (socket) => {
-    const user = await User.findById(socket.userId).select('name email');
-    if (!user) {
-      socket.disconnect();
-      return;
-    }
-    socket.user = user;
+export function broadcastRestoreToRoom(documentId, stateArray) {
+  if (!ioRef) return;
+  const entry = docs.get(documentId);
+  if (entry) {
+    Y.applyUpdate(entry.ydoc, new Uint8Array(stateArray));
+    scheduleSave(documentId, entry.ydoc);
+  }
+  ioRef.to(`doc:${documentId}`).emit('ydoc-restore', { state: stateArray });
+}
 
+export function setupCollaboration(io) {
+  ioRef = io;
+  io.on('connection', (socket) => {
     socket.on('join-document', async ({ documentId }) => {
       try {
+        const user = await User.findById(socket.userId).select('name email');
+        if (!user) {
+          socket.emit('collab-error', { message: 'User not found' });
+          return;
+        }
+        socket.user = user;
+
         const { doc, permission } = await getDocumentAccess(documentId, socket.userId);
         if (!doc || !canView(permission)) {
           socket.emit('collab-error', { message: 'Access denied' });
@@ -121,10 +133,15 @@ export function setupCollaboration(io) {
       const entry = docs.get(socket.documentId);
       if (!entry) return;
 
-      const update = new Uint8Array(updateArray);
-      Y.applyUpdate(entry.ydoc, update, socket.id);
-      socket.to(`doc:${socket.documentId}`).emit('ydoc-update', updateArray);
-      scheduleSave(socket.documentId, entry.ydoc);
+      try {
+        const update = new Uint8Array(updateArray);
+        Y.applyUpdate(entry.ydoc, update, socket.id);
+        socket.to(`doc:${socket.documentId}`).emit('ydoc-update', updateArray);
+        scheduleSave(socket.documentId, entry.ydoc);
+      } catch (err) {
+        console.error('ydoc-update rejected:', err.message);
+        socket.emit('collab-error', { message: 'Invalid document update' });
+      }
     });
 
     socket.on('awareness-broadcast', (data) => {

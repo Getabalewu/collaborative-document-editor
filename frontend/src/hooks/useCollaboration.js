@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { getSocketUrl } from '../api/client';
 
 export class SocketIOProvider {
-  constructor(documentId, ydoc, { token, onSynced, onPermission, onPresence, onTyping, onError }) {
+  constructor(documentId, ydoc, { token, onSynced, onPermission, onPresence, onTyping, onError, onRestore }) {
     this.documentId = documentId;
     this.ydoc = ydoc;
     this.synced = false;
@@ -29,6 +29,11 @@ export class SocketIOProvider {
 
     this.socket.on('ydoc-update', (updateArray) => {
       Y.applyUpdate(this.ydoc, new Uint8Array(updateArray), 'remote');
+    });
+
+    this.socket.on('ydoc-restore', ({ state }) => {
+      Y.applyUpdate(this.ydoc, new Uint8Array(state), 'remote');
+      onRestore?.();
     });
 
     this.ydoc.on('update', (update, origin) => {

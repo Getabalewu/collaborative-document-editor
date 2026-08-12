@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleString();
 }
 
 export default function EditorSidebar({ documentId, permission, onRestore }) {
+  const { user } = useAuth();
   const [tab, setTab] = useState('comments');
   const [comments, setComments] = useState([]);
   const [versions, setVersions] = useState([]);
   const [collaborators, setCollaborators] = useState({ owner: null, collaborators: [] });
   const [commentText, setCommentText] = useState('');
+  const [replyToId, setReplyToId] = useState(null);
+  const [replyText, setReplyText] = useState('');
   const [shareEmail, setShareEmail] = useState('');
   const [sharePerm, setSharePerm] = useState('viewer');
   const [shareError, setShareError] = useState('');
@@ -74,8 +78,20 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
     if (!commentText.trim()) return;
     try {
       const comment = await api.addComment(documentId, commentText.trim());
-      setComments((prev) => [comment, ...prev]);
+      setComments((prev) => [...prev, comment]);
       setCommentText('');
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function handleAddReply(commentId) {
+    if (!replyText.trim()) return;
+    try {
+      const reply = await api.addComment(documentId, replyText.trim(), commentId);
+      setComments((prev) => [...prev, reply]);
+      setReplyText('');
+      setReplyToId(null);
     } catch (err) {
       alert(err.message);
     }
@@ -85,6 +101,16 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
     try {
       const updated = await api.updateComment(documentId, commentId, { resolved: !resolved });
       setComments((prev) => prev.map((c) => (c._id === commentId ? updated : c)));
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function handleDeleteComment(commentId) {
+    if (!confirm('Delete this comment?')) return;
+    try {
+      await api.deleteComment(documentId, commentId);
+      setComments((prev) => prev.filter((c) => c._id !== commentId && c.parent !== commentId));
     } catch (err) {
       alert(err.message);
     }
@@ -139,6 +165,19 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
     }
   }
 
+  const topLevelComments = comments.filter((c) => !c.parent);
+  const repliesByParent = comments.reduce((acc, c) => {
+    if (c.parent) {
+      if (!acc[c.parent]) acc[c.parent] = [];
+      acc[c.parent].push(c);
+    }
+    return acc;
+  }, {});
+
+  function canDeleteComment(c) {
+    return c.author?._id === user?.id || isOwner;
+  }
+
   return (
     <aside className="editor-sidebar">
       <div className="sidebar-tabs">
@@ -180,7 +219,7 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
             {comments.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No comments yet.</p>
             ) : (
-              comments.map((c) => (
+              topLevelComments.map((c) => (
                 <div key={c._id} className={`comment-item ${c.resolved ? 'resolved' : ''}`}>
                   <div className="comment-author">{c.author?.name}</div>
                   <div className="comment-text">{c.text}</div>
@@ -195,7 +234,79 @@ export default function EditorSidebar({ documentId, permission, onRestore }) {
                         {c.resolved ? 'Reopen' : 'Resolve'}
                       </button>
                     )}
+                    {canComment && (
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ marginLeft: 4 }}
+                        onClick={() => {
+                          setReplyToId(replyToId === c._id ? null : c._id);
+                          setReplyText('');
+                        }}
+                      >
+                        Reply
+                      </button>
+                    )}
+                    {canDeleteComment(c) && (
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        style={{ marginLeft: 4 }}
+                        onClick={() => handleDeleteComment(c._id)}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
+
+                  {replyToId === c._id && canComment && (
+                    <form
+                      className="comment-form reply-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAddReply(c._id);
+                      }}
+                    >
+                      <textarea
+                        placeholder={`Reply to ${c.author?.name}...`}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        autoFocus
+                      />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="submit" className="btn btn-primary btn-sm">Reply</button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setReplyToId(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {(repliesByParent[c._id] || []).map((r) => (
+                    <div key={r._id} className={`comment-reply ${r.resolved ? 'resolved' : ''}`}>
+                      <div className="comment-author">{r.author?.name}</div>
+                      <div className="comment-text">{r.text}</div>
+                      <div className="comment-meta">
+                        {formatDate(r.createdAt)}
+                        {canComment && (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => toggleResolved(r._id, r.resolved)}
+                          >
+                            {r.resolved ? 'Reopen' : 'Resolve'}
+                          </button>
+                        )}
+                        {canDeleteComment(r) && (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ marginLeft: 4 }}
+                            onClick={() => handleDeleteComment(r._id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ))
             )}
